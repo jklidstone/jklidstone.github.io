@@ -1,0 +1,360 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+
+    <script src="//d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
+    <script src="//d3js.org/topojson.v1.min.js"></script>
+    <script src="//d3js.org/d3-geo-projection.v1.min.js"></script>
+    <script src="/datamaps.world.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Gaegu|Stylish" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Barlow+Condensed" rel="stylesheet">
+    <!-- <script src="//d3js.org/d3.v4.min.js"></script> -->
+    <!-- https://dh.tcd.ie/clontarf/Viking%20Europe%20-%20Map%20of%20Viking%20Raids%20and%20Settlement -->
+    <!-- https://web.cn.edu/kwheeler/viking_attacklist.html -->
+    <script
+  src="https://code.jquery.com/jquery-3.3.1.js"
+  integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+  crossorigin="anonymous"></script>
+</head>
+<style>
+body {
+      font-family:"avenir next", Arial, sans-serif;
+      font-size: 12px;
+      color: #696969;
+    }
+
+    #play-button {
+      position: absolute;
+      top: 300px;
+      left: 40px;
+      background: red;
+      padding-right: 26px;
+      border-radius: 3px;
+      border: none;
+      color: white;
+      margin: 0;
+      padding: 0 12px;
+      width: 60px;
+      cursor: pointer;
+      height: 30px;
+
+    }
+
+    #play-button:hover {
+      background-color: #696969;
+    }
+
+    .ticks {
+      font-size: 10px;
+    }
+
+    .track,
+    .track-inset,
+    .track-overlay {
+      stroke-linecap: round;
+    }
+
+    .track {
+      stroke: #000;
+      stroke-opacity: 0.3;
+      stroke-width: 10px;
+    }
+
+    .track-inset {
+      stroke: #dcdcdc;
+      stroke-width: 8px;
+    }
+
+    .track-overlay {
+      pointer-events: stroke;
+      stroke-width: 50px;
+      stroke: transparent;
+      cursor: crosshair;
+    }
+
+    .handle {
+      fill: #fff;
+      stroke: #000;
+      stroke-opacity: 0.5;
+      stroke-width: 1.25px;
+    }
+    div.tooltip {
+    position: absolute;
+    text-align: center;
+    width: 60px;
+    height: 15px;
+    padding: 2px;
+    font: 12px sans-serif;
+    background: white;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+}
+  </style>
+<body>
+<button id="play-button">Raid!</button>
+<svg id="svg1" width="960" height="500"></svg>
+<svg id="svg2"width="960" height="200"></svg>
+<script>
+
+var width = 960,
+    height = 700;
+var margin = {top:50, right:50, bottom:0, left:50};
+var playButton = d3.select("#play-button");
+
+var svg = d3.select("#svg1"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height")
+
+    var div = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
+
+var svg2 = d3.select("#svg2"),
+        width = +svg.attr("width"),
+        height = +svg.attr("height")
+
+
+
+
+var projection = d3.geoEquirectangular()
+    .scale(500) //height / Math.PI, normal
+    .translate([width / 2, height / 0.75]); //[width / 2, height / 2], normal - [width / 2.5, height / 1.2]
+
+
+var path = d3.geoPath()
+    .projection(projection);
+
+
+var graticule = d3.geoGraticule();
+
+svg.append("path")
+    .datum(graticule)
+    .attr("class", "graticule")
+    .attr("d", path);
+
+svg.append("path")
+    .datum({type: "Sphere"})
+    .attr("class", "sphere")
+    .attr("d", path)
+    .attr("fill", "none")
+    .attr("stroke", "black");
+
+//////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////
+
+var csvData;
+d3.csv("/raids.csv", function(error, data){
+  if (error) throw error;
+
+  data.forEach(function(d){
+    d.name = d.name;
+    d.year = +d.year;
+    d.xCord = +d.xCord;
+    d.yCord = +d.yCord;
+    d.desc = d.desc;
+  });
+  console.log(data);
+  csvData = data;
+
+});
+
+var dataset;
+d3.json("https://unpkg.com/world-atlas@1/world/50m.json", function(error, world) {
+  if (error) throw error;
+  //////////////////////////////////////////////////////////////////
+  var moving = false;
+  var currentValue = 0;
+  var targetValue = width;
+  var formatDateIntoYear = d3.timeFormat("%Y");
+  var formatDate = d3.timeFormat("%Y");
+  var parseDate = d3.timeParse("%m/%d/%y");
+
+  var startDate = new Date("793-01-01"),
+      endDate = new Date("1043-04-01");
+
+
+  var x = d3.scaleLinear()
+      .domain([793, 1043])
+      .range([0, 400])
+      .clamp(true);
+
+  var text = svg.append("g")
+
+  var slider = svg.append("g")
+      .attr("class", "slider")
+      .attr("transform", "translate(" + 30 + "," + 250 + ")");
+
+  slider.append("line")
+      .attr("class", "track")
+      .attr("x1", x.range()[0])
+      .attr("x2", x.range()[1])
+    .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+      .attr("class", "track-inset")
+    .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+      .attr("class", "track-overlay")
+      .call(d3.drag()
+          .on("start.interrupt", function() { slider.interrupt(); })
+          .on("start drag", function() {
+            currentValue = d3.event.x;
+            update(x.invert(currentValue));
+          })
+      );
+
+  slider.insert("g", ".track-overlay")
+      .attr("class", "ticks")
+      .attr("transform", "translate(0," + 18 + ")")
+    .selectAll("text")
+      .data(x.ticks(10))
+      .enter()
+      .append("text")
+      .attr("x", x)
+      .attr("y", 10)
+      .attr("text-anchor", "middle")
+      .text(function(d) {
+        var e = Math.floor(d);
+        return e; });
+
+  var handle = slider.insert("circle", ".track-overlay")
+      .attr("class", "handle")
+      .attr("r", 9);
+
+  var label = slider.append("text")
+      .attr("class", "label")
+      .attr("text-anchor", "middle")
+      .text("793")
+      .attr("transform", "translate(0," + (-25) + ")")
+    //////////////////////////////////////////////
+
+    playButton
+  .on("click", function() {
+  var button = d3.select(this);
+  if (button.text() == "Pause") {
+    moving = false;
+    clearInterval(timer);
+    // timer = 0;
+    button.text("Raid!");
+  } else {
+    moving = true;
+    timer = setInterval(step, 300);
+    button.text("Pause");
+  }
+  console.log("Slider moving: " + moving);
+});
+
+    function prepare(d) {
+      d.id = d.id;
+      d.date = parseDate(d.date);
+      return d;
+    }
+
+    function step() {
+      update(x.invert(currentValue));
+      currentValue = currentValue + (targetValue/151);
+      if (currentValue > targetValue) {
+        moving = false;
+        currentValue = 0;
+        clearInterval(timer);
+        // timer = 0;
+        playButton.text("Play");
+        console.log("Slider moving: " + moving);
+      }
+    }
+    //////////////////////////////////////////////
+
+  svg.insert("path", ".graticule")
+      .datum(topojson.feature(world, world.objects.land))
+      .attr("class", "land")
+      .attr("d", path);
+
+  svg.insert("path", ".graticule")
+      .datum(topojson.mesh(world, world.objects.countries, function(a, b) { return a !== b; }))
+      .attr("class", "boundary")
+      .attr("d", path);
+
+
+      function drawPlot(dataP){
+      d3.csv("/raids.csv", function(error, data){
+        if (error) throw error;
+
+        svg.selectAll("circle")
+         .data(dataP).enter()
+         .append("circle")
+         .attr("cx", function (d) {
+           var xd = [d.xCord, d.yCord];
+           console.log(projection(xd)); return projection(xd)[0];
+         })
+         .attr("cy", function (d) {
+           var yd = [d.xCord, d.yCord];
+           return projection(yd)[1]; })
+         .attr("r", "2px")
+         .attr("fill", "red")
+         .on("mouseover", function(d) {
+           d3.select(this).attr("r",10)
+           div.transition()
+                .duration(200)
+                .style("opacity", .9);
+              div.html(d.name)
+                .style("left", (d3.event.pageX) + "px")
+                .style("top", (d3.event.pageY - 28) + "px");
+         })
+         .on("mouseout", function(d) {
+           div.transition()
+                .duration(500)
+                .style("opacity", 0);
+           d3.select(this).attr("r",3)
+         })
+         .on("click", function (j) {
+           svg2.selectAll("*").remove();
+           var clickFilter = dataP.filter(function(d){
+             return d.name == j.name;
+           })
+           var yText = 50;
+           console.log(clickFilter);
+           clickFilter.forEach(function(d){
+             console.log(d.year);
+             svg2.append("text")
+             	.attr("x", 0)
+             	.attr("y", yText)
+             	.attr("class", "legend")
+             	.style("fill", "black")
+             	.text(d.name + ", " + d.year + " - " + d.desc);
+            yText += 20;
+           })
+           console.log(j.name);
+         })
+         .style("opacity", 0.5)
+         .attr("r", 3)
+         .transition()
+         .duration(400)
+         .attr("r", 15)
+         .transition()
+         .attr("r", 3);
+
+         svg.selectAll("circle")
+          .data(dataP).exit().remove();
+
+       });}
+
+    function update(h) {
+    // update position and text of label according to slider scale
+
+    handle.attr("cx", x(h));
+    label.attr("x", x(h)).text(Math.floor(h));
+
+    // filter data set and redraw plot
+    var newData = csvData.filter(function(d) {
+    h = Math.floor(h);
+
+      return d.year <= h;
+    })
+    console.log(newData);
+    drawPlot(newData);
+  }
+
+});
+</script>
+</body>
+</html>
